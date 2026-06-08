@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importador de Produção Corrigido</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h2 { color: #d32f2f; }
+        textarea { width: 100%; height: 250px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: monospace; font-size: 11px; margin-bottom: 15px; box-sizing: border-box; }
+        .btn-enviar { background-color: #333; color: white; border: none; padding: 15px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; }
+        .btn-enviar:hover { background-color: #d32f2f; }
+        #status { margin-top: 15px; font-weight: bold; text-align: center; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: #fff; padding: 20px; border-radius: 8px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🚀 Lançador de Produção FIREBASE</h2>
+    <p>Cole o relatório completo do sistema abaixo:</p>
+    <textarea id="dadosBrutos" placeholder="Cole aqui..."></textarea>
+    <button class="btn-enviar" onclick="processar()">ENVIAR PARA BANCO DE DADOS</button>
+    <div id="status"></div>
+</div>
+
+<div id="overlay" class="overlay">
+    <div class="modal"><h3 id="msgProgresso">Processando e Enviando ao Banco...</h3></div>
+</div>
+
+<script>
+    // =========================================================================
+    // CREDENCIAIS DO FIREBASE - COLE AQUI (Sem a barra / no final do URL)
+    // =========================================================================
+    const FIREBASE_URL = "https://chat-a1d70.firebaseio.com";
+    const FIREBASE_SECRET = "";
+    const AUTH = FIREBASE_SECRET && !/^https?:\/\//i.test(FIREBASE_SECRET)
+        ? `?auth=${encodeURIComponent(FIREBASE_SECRET)}` : "";
+// =========================================================================
+    // =========================================================================
+
+    async function processar() {
+        const raw = document.getElementById('dadosBrutos').value;
+        const status = document.getElementById('status');
+        const overlay = document.getElementById('overlay');
+
+        if (!raw.trim()) { alert("Cole os dados!"); return; }
+
+        overlay.style.display = 'flex';
+        
+        try {
+            const lines = raw.split('\n');
+            let mapaProducao = {}; // Aqui montamos a aba "Referencia" do App Script no Frontend
+            
+            let modMemoria = ""; let tamMemoria = ""; let corMemoria = ""; let ordMemoria = "";
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
+                if (line.includes("Total") || line.trim() === "") continue;
+
+                let cols = line.split('\t');
+                if (cols.length < 5) continue;
+
+                let mod = cols[0] ? cols[0].trim() : "";
+                if (mod && !mod.includes("Modelo")) modMemoria = mod;
+
+                let tam = (cols.length > 4) ? cols[4].trim() : "";
+                if (tam && !tam.includes("Tamanho")) tamMemoria = tam;
+
+                let cor = (cols.length > 6) ? cols[6].trim() : "";
+                if (cor && !cor.includes("Cor variante")) corMemoria = cor;
+
+                let ord = (cols.length > 8) ? cols[8].trim() : "";
+                if (ord && !ord.includes("Ordem")) ordMemoria = ord;
+
+                let pac = (cols.length > 10) ? cols[10].trim() : "";
+                let gir = (cols.length > 12) ? cols[12].trim() : "0";
+                let ref = (cols.length > 13) ? cols[13].trim() : "0";
+                let rep = (cols.length > 15) ? cols[15].trim() : "0";
+
+                if (pac === "Pacote" || gir.includes("Giro")) continue;
+
+                // Proteção contra NaN: usa Number() e valida antes de somar
+                const girNum = Number(gir);
+                const refNum = Number(ref);
+                const repNum = Number(rep);
+
+                if (pac || (!isNaN(girNum) && girNum > 0) || (!isNaN(refNum) && refNum > 0) || (!isNaN(repNum) && repNum > 0)) {
+                    let chave = modMemoria.toUpperCase() + "|" + tamMemoria.toUpperCase().replace(/[.\/]/g, ',');
+                    
+                    if (!mapaProducao[chave]) {
+                        mapaProducao[chave] = { giro: 0, refilagem: 0, reprovado: 0, detalhes: [] };
+                    }
+
+                    if (!isNaN(girNum)) mapaProducao[chave].giro      += girNum;
+                    if (!isNaN(refNum)) mapaProducao[chave].refilagem  += refNum;
+                    if (!isNaN(repNum)) mapaProducao[chave].reprovado  += repNum;
+                    
+                    if (corMemoria || ordMemoria || pac) {
+                        mapaProducao[chave].detalhes.push({ cor: corMemoria, ordem: ordMemoria, pacote: pac });
+                    }
+                }
+            }
+
+            // Envia tudo mastigado direto para a árvore "referencia" no Firebase
+            await fetch(`${FIREBASE_URL}/referencia.json${AUTH}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(mapaProducao)
+            });
+
+            status.innerText = "✅ Sincronizado com o Banco de Dados!";
+            status.style.color = "green";
+            document.getElementById('dadosBrutos').value = "";
+        } catch (e) {
+            status.innerText = "❌ Erro na sincronização com banco de dados.";
+            status.style.color = "red";
+        } finally {
+            overlay.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>
