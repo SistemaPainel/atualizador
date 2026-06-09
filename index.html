@@ -67,8 +67,8 @@
 
                 let tam = (cols.length > 4) ? cols[4].trim() : "";
                 if (tam && !tam.includes("Tamanho")) {
-                    // Normaliza transformando a string em Float e voltando para vírgula
-                    tam = parseFloat(tam.replace(',', '.')).toString().replace('.', ',');
+                    // Apenas troca ponto por vírgula, sem usar parseFloat para não apagar o "X" ou letras
+                    tam = tam.replace('.', ',');
                     tamMemoria = tam;
                 }
 
