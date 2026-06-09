@@ -38,7 +38,6 @@
     const FIREBASE_SECRET = "";
     const AUTH = FIREBASE_SECRET && !/^https?:\/\//i.test(FIREBASE_SECRET)
         ? `?auth=${encodeURIComponent(FIREBASE_SECRET)}` : "";
-// =========================================================================
     // =========================================================================
 
     async function processar() {
@@ -67,7 +66,11 @@
                 if (mod && !mod.includes("Modelo")) modMemoria = mod;
 
                 let tam = (cols.length > 4) ? cols[4].trim() : "";
-                if (tam && !tam.includes("Tamanho")) tamMemoria = tam;
+                if (tam && !tam.includes("Tamanho")) {
+                    // Normaliza transformando a string em Float e voltando para vírgula
+                    tam = parseFloat(tam.replace(',', '.')).toString().replace('.', ',');
+                    tamMemoria = tam;
+                }
 
                 let cor = (cols.length > 6) ? cols[6].trim() : "";
                 if (cor && !cor.includes("Cor variante")) corMemoria = cor;
@@ -95,8 +98,8 @@
                     }
 
                     if (!isNaN(girNum)) mapaProducao[chave].giro      += girNum;
-                    if (!isNaN(refNum)) mapaProducao[chave].refilagem  += refNum;
-                    if (!isNaN(repNum)) mapaProducao[chave].reprovado  += repNum;
+                    if (!isNaN(refNum)) mapaProducao[chave].refilagem += refNum;
+                    if (!isNaN(repNum)) mapaProducao[chave].reprovado += repNum;
                     
                     if (corMemoria || ordMemoria || pac) {
                         mapaProducao[chave].detalhes.push({ cor: corMemoria, ordem: ordMemoria, pacote: pac });
