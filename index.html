@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Importador de Produção Corrigido</title>
+    <title>Importador de Production Corrigido</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -19,7 +19,7 @@
 <body>
 
 <div class="container">
-    <h2>🚀 Lançador de Produção ERP Para Monitor</h2>
+    <h2>🚀 Lançador de Produção FIREBASE</h2>
     <p>Cole o relatório completo do sistema abaixo:</p>
     <textarea id="dadosBrutos" placeholder="Cole aqui..."></textarea>
     <button class="btn-enviar" onclick="processar()">ENVIAR PARA BANCO DE DADOS</button>
@@ -67,8 +67,15 @@
 
                 let tam = (cols.length > 4) ? cols[4].trim() : "";
                 if (tam && !tam.includes("Tamanho")) {
-                    // Apenas troca ponto por vírgula, sem usar parseFloat para não apagar o "X" ou letras
+                    // Troca ponto por vírgula
                     tam = tam.replace('.', ',');
+                    
+                    // CORREÇÃO: Limpa zeros inúteis no final (ex: "12,00" vira "12" e "7,50" vira "7,5")
+                    if (tam.includes(',')) {
+                        tam = tam.replace(/0+$/, ''); // Remove os zeros finais
+                        tam = tam.replace(/,$/, '');  // Se sobrar só a vírgula no final, remove-a também
+                    }
+                    
                     tamMemoria = tam;
                 }
 
@@ -107,7 +114,7 @@
                 }
             }
 
-            // Envia tudo mastigado direto para a árvore "referencia" no Firebase
+            // Envia tudo para a árvore "referencia" no Firebase
             await fetch(`${FIREBASE_URL}/referencia.json${AUTH}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
