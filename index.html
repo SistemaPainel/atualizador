@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Importador</title>
+    <title>Importador ERP</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; padding: 20px; color: #333; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -20,7 +20,7 @@
 
 <div class="container">
     <h2>🚀 Lançador de Produção ERP</h2>
-    <p>Cole o relatório completo do sistema abaixo:</p>
+    <p>Cole o relatório completo do ERP abaixo:</p>
     <textarea id="dadosBrutos" placeholder="Cole aqui..."></textarea>
     <button class="btn-enviar" onclick="processar()">ENVIAR PARA BANCO DE DADOS</button>
     <div id="status"></div>
@@ -31,14 +31,10 @@
 </div>
 
 <script>
-    // =========================================================================
-    // CREDENCIAIS DO FIREBASE - COLE AQUI (Sem a barra / no final do URL)
-    // =========================================================================
-    const FIREBASE_URL = "https://gen-lang-client-0514567939-default-rtdb.firebaseio.com";
+    const FIREBASE_URL = "https://projeto-hackton-618ca-default-rtdb.firebaseio.com";
     const FIREBASE_SECRET = "";
     const AUTH = FIREBASE_SECRET && !/^https?:\/\//i.test(FIREBASE_SECRET)
         ? `?auth=${encodeURIComponent(FIREBASE_SECRET)}` : "";
-    // =========================================================================
 
     async function processar() {
         const raw = document.getElementById('dadosBrutos').value;
@@ -51,70 +47,120 @@
         
         try {
             const lines = raw.split('\n');
-            let mapaProducao = {}; // Aqui montamos a aba "Referencia" do App Script no Frontend
+            let mapaProducao = {}; 
             
-            let modMemoria = ""; let tamMemoria = ""; let corMemoria = ""; let ordMemoria = "";
+            let modMemoria = "", tamMemoria = "", corMemoria = "", ordMemoria = "";
 
+            let colMod = -1, colTam = -1, colCor = -1, colOrd = -1, colPac = -1;
+            let colGir = -1, colRef = -1, colRep = -1, colInj = -1;
+
+            // 1. MAPEAMENTO DE CABEÇALHO (Testa Injetada em 1º lugar)
+            for (let i = 0; i < lines.length; i++) {
+                let lLower = lines[i].toLowerCase();
+                if (lLower.includes("modelo") || lLower.includes("giro") || lLower.includes("total")) {
+                    let cols = lines[i].split('\t');
+                    
+                    for (let c = 0; c < cols.length; c++) {
+                        let txt = cols[c].trim().toLowerCase();
+                        if (!txt) continue;
+
+                        if (txt.includes("injetada")) colInj = c;
+                        else if (txt.includes("01 giro") || txt === "01 giro:borracha" || txt.includes("giro: borracha")) colGir = c;
+                        else if (txt.includes("02 giro") || txt.includes("refilagem")) colRef = c;
+                        else if (txt.includes("99 di") || txt.includes("reprovado")) colRep = c;
+                        else if (txt.includes("modelo")) colMod = c;
+                        else if (txt === "tam" || txt.includes("tamanho")) colTam = c;
+                        else if (txt.includes("cor")) colCor = c;
+                        else if (txt.includes("ordem")) colOrd = c;
+                        else if (txt === "pa" || txt.includes("pacote")) colPac = c;
+                    }
+                    if (colGir !== -1 || colInj !== -1) break;
+                }
+            }
+
+            function parseNum(str) {
+                if (!str) return 0;
+                let cleaned = str.trim().replace(',', '.');
+                let n = Number(cleaned);
+                return (!isNaN(n) && n > 0) ? n : 0;
+            }
+
+            // 2. PROCESSAMENTO DAS LINHAS
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i];
-                if (line.includes("Total") || line.trim() === "") continue;
+                if (line.trim() === "") continue;
 
-                let cols = line.split('\t');
-                if (cols.length < 5) continue;
-
-                let mod = cols[0] ? cols[0].trim() : "";
-                if (mod && !mod.includes("Modelo")) modMemoria = mod;
-
-                let tam = (cols.length > 4) ? cols[4].trim() : "";
-                if (tam && !tam.includes("Tamanho")) {
-                    // Troca ponto por vírgula
-                    tam = tam.replace('.', ',');
-                    
-                    // CORREÇÃO: Limpa zeros inúteis no final (ex: "12,00" vira "12" e "7,50" vira "7,5")
-                    if (tam.includes(',')) {
-                        tam = tam.replace(/0+$/, ''); // Remove os zeros finais
-                        tam = tam.replace(/,$/, '');  // Se sobrar só a vírgula no final, remove-a também
-                    }
-                    
-                    tamMemoria = tam;
+                let lLower = line.toLowerCase();
+                
+                // Ignora qualquer subtotal com a palavra "Total"
+                if (lLower.includes("total") || lLower.includes("quantidade") || (lLower.includes("modelo") && lLower.includes("tam"))) {
+                    continue;
                 }
 
-                let cor = (cols.length > 6) ? cols[6].trim() : "";
-                if (cor && !cor.includes("Cor variante")) corMemoria = cor;
+                let cols = line.split('\t');
+                let len = cols.length;
+                if (len < 2) continue;
 
-                let ord = (cols.length > 8) ? cols[8].trim() : "";
-                if (ord && !ord.includes("Ordem")) ordMemoria = ord;
+                // Memória de Modelo
+                if (colMod >= 0 && len > colMod && cols[colMod].trim()) {
+                    let m = cols[colMod].trim().replace(/^[-+]\s*/, '');
+                    if (!m.toLowerCase().includes("modelo")) modMemoria = m;
+                } else if (cols[0] && cols[0].trim()) {
+                    let m = cols[0].trim().replace(/^[-+]\s*/, '');
+                    if (!m.toLowerCase().includes("modelo")) modMemoria = m;
+                }
 
-                let pac = (cols.length > 10) ? cols[10].trim() : "";
-                let gir = (cols.length > 12) ? cols[12].trim() : "0";
-                let ref = (cols.length > 13) ? cols[13].trim() : "0";
-                let rep = (cols.length > 15) ? cols[15].trim() : "0";
+                // Memória de Tamanho
+                if (colTam >= 0 && len > colTam && cols[colTam].trim()) {
+                    let t = cols[colTam].trim().replace(/^[-+]\s*/, '');
+                    if (!t.toLowerCase().includes("tam")) {
+                        t = t.replace('.', ',');
+                        if (t.includes(',')) t = t.replace(/0+$/, '').replace(/,$/, ''); 
+                        tamMemoria = t;
+                    }
+                } else if (len > 1 && cols[1] && cols[1].trim()) {
+                    let t = cols[1].trim().replace(/^[-+]\s*/, '');
+                    if (!t.toLowerCase().includes("tam")) {
+                        t = t.replace('.', ',');
+                        if (t.includes(',')) t = t.replace(/0+$/, '').replace(/,$/, ''); 
+                        tamMemoria = t;
+                    }
+                }
 
-                if (pac === "Pacote" || gir.includes("Giro")) continue;
+                // Captura Cor e Ordem
+                if (colCor >= 0 && len > colCor && cols[colCor].trim()) corMemoria = cols[colCor].trim();
+                if (colOrd >= 0 && len > colOrd && cols[colOrd].trim()) ordMemoria = cols[colOrd].trim();
 
-                // Proteção contra NaN: usa Number() e valida antes de somar
-                const girNum = Number(gir);
-                const refNum = Number(ref);
-                const repNum = Number(rep);
+                let pacVal = "";
+                if (colPac >= 0 && len > colPac) pacVal = cols[colPac].trim();
+                if (pacVal.toLowerCase() === "pacote" || pacVal.toLowerCase() === "pa") continue;
 
-                if (pac || (!isNaN(girNum) && girNum > 0) || (!isNaN(refNum) && refNum > 0) || (!isNaN(repNum) && repNum > 0)) {
+                // Extrai os valores das colunas dinâmicas mapeadas
+                let vGir = (colGir >= 0 && len > colGir) ? parseNum(cols[colGir]) : 0;
+                let vRef = (colRef >= 0 && len > colRef) ? parseNum(cols[colRef]) : 0;
+                let vRep = (colRep >= 0 && len > colRep) ? parseNum(cols[colRep]) : 0;
+                let vInj = (colInj >= 0 && len > colInj) ? parseNum(cols[colInj]) : 0;
+
+                if (pacVal || vGir > 0 || vRef > 0 || vRep > 0 || vInj > 0) {
+                    if (!modMemoria || !tamMemoria) continue;
+
                     let chave = modMemoria.toUpperCase() + "|" + tamMemoria.toUpperCase().replace(/[.\/]/g, ',');
                     
                     if (!mapaProducao[chave]) {
-                        mapaProducao[chave] = { giro: 0, refilagem: 0, reprovado: 0, detalhes: [] };
+                        mapaProducao[chave] = { giro: 0, refilagem: 0, reprovado: 0, giroInj: 0, detalhes: [] };
                     }
 
-                    if (!isNaN(girNum)) mapaProducao[chave].giro      += girNum;
-                    if (!isNaN(refNum)) mapaProducao[chave].refilagem += refNum;
-                    if (!isNaN(repNum)) mapaProducao[chave].reprovado += repNum;
+                    mapaProducao[chave].giro      += vGir;
+                    mapaProducao[chave].refilagem += vRef;
+                    mapaProducao[chave].reprovado += vRep;
+                    mapaProducao[chave].giroInj   += vInj;
                     
-                    if (corMemoria || ordMemoria || pac) {
-                        mapaProducao[chave].detalhes.push({ cor: corMemoria, ordem: ordMemoria, pacote: pac });
+                    if (corMemoria || ordMemoria || pacVal) {
+                        mapaProducao[chave].detalhes.push({ cor: corMemoria, ordem: ordMemoria, pacote: pacVal });
                     }
                 }
             }
 
-            // Envia tudo para a árvore "referencia" no Firebase
             await fetch(`${FIREBASE_URL}/referencia.json${AUTH}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -127,6 +173,7 @@
         } catch (e) {
             status.innerText = "❌ Erro na sincronização com banco de dados.";
             status.style.color = "red";
+            console.error(e);
         } finally {
             overlay.style.display = 'none';
         }
